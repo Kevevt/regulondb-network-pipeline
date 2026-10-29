@@ -140,7 +140,7 @@ def ejecutar_extraccion(con, data_dir=None):
     """
     if data_dir is None:
         base_dir = Path(__file__).resolve().parent.parent
-        data_dir = base_dir / "data"
+        data_dir = base_dir / "data" / "raw"
     else:
         data_dir = Path(data_dir)
 
@@ -159,9 +159,19 @@ def ejecutar_extraccion(con, data_dir=None):
 
 
 if __name__ == "__main__":
+    from pathlib import Path
     import duckdb
 
-    conexion = duckdb.connect()
+    # Resolver la ruta hacia data/regulondb.duckdb
+    base_dir = Path(__file__).resolve().parent.parent
+    db_path = base_dir / 'data' / 'db' /'regulondb.duckdb'
+    # Pasamos la ruta, DuckDB crea el archivo sino existe o lo actualiza.
+    conexion = duckdb.connect(str(db_path))
+
     ejecutar_extraccion(conexion)
+
     print("=== Auditoría de Extracción Finalizada ===")
     conexion.sql("SELECT * FROM control_cargas").show()
+
+    # Cerrar conexión
+    conexion.close()
