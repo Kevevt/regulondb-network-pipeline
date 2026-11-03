@@ -166,6 +166,7 @@ if __name__ == "__main__":
     base_dir = Path(__file__).resolve().parent.parent
     db_path = base_dir / 'data' / 'db' /'regulondb.duckdb'
     # Pasamos la ruta, DuckDB crea el archivo sino existe o lo actualiza.
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     conexion = duckdb.connect(str(db_path))
 
     ejecutar_extraccion(conexion)
