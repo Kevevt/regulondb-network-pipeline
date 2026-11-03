@@ -12,8 +12,6 @@ Pipeline en Python y DuckDB que ingesta los datos de regulación transcripcional
 - **Una red de regulación** representa esas relaciones como un grafo: los nodos son genes y reguladores; las aristas indican quién regula a quién y con qué efecto.
 - **Método:** la construcción de la red seguirá la metodología publicada de Abasy Atlas ([Ibarra-Arellano et al., 2016](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4885605/)).
 
-<!-- TODO: si la transformación sigue el método de construcción de redes de Abasy Atlas, cítalo aquí como referencia metodológica (Ibarra-Arellano et al., 2016: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4885605/) -->
-
 <!-- TODO: añade 2-3 líneas en tus palabras sobre por qué importa esta red (qué pregunta biológica permite responder). Aquí es donde se nota tu formación como biotecnólogo. -->
 
 ## Estado del proyecto
@@ -53,7 +51,7 @@ Los archivos no se incluyen en el repositorio. Se descargan de RegulonDB y se co
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-mkdir data\db
+mkdir data\raw
 ```
 
 **Linux / macOS:**
@@ -62,7 +60,7 @@ mkdir data\db
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-mkdir -p data/raw data/db
+mkdir -p data/raw
 ```
 
 Después, coloca los 5 archivos fuente en `data/raw/` y ejecuta desde la raíz del repositorio:
