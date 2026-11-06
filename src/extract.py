@@ -1,7 +1,8 @@
 """Módulo de extracción e ingesta de datos crudos de RegulonDB hacia DuckDB."""
-
 from pathlib import Path
 import re
+import duckdb
+from config import DB_PATH
 
 COLUMNAS_SRNA = [
     "srna_id",
@@ -159,20 +160,11 @@ def ejecutar_extraccion(con, data_dir=None):
 
 
 if __name__ == "__main__":
-    from pathlib import Path
-    import duckdb
+    conexion = duckdb.connect(str(DB_PATH))
 
-    # Resolver la ruta hacia data/regulondb.duckdb
-    base_dir = Path(__file__).resolve().parent.parent
-    db_path = base_dir / 'data' / 'db' /'regulondb.duckdb'
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    # Pasamos la ruta, DuckDB crea el archivo si no existe o lo actualiza.
-    conexion = duckdb.connect(str(db_path))
-
-    ejecutar_extraccion(conexion)
-
-    print("=== Auditoría de Extracción Finalizada ===")
-    conexion.sql("SELECT * FROM control_cargas").show()
-
-    # Cerrar conexión
-    conexion.close()
+    try:
+        ejecutar_extraccion(conexion)
+        print("=== Auditoría de Extracción Finalizada ===")
+        conexion.sql("SELECT * FROM control_cargas").show()
+    finally:
+        conexion.close()
