@@ -1,6 +1,5 @@
 """Módulo para la transformación de datos crudos (Raw) a la Capa Silver en DuckDB."""
 
-from pathlib import Path
 import duckdb
 from config import DB_PATH
 
@@ -102,9 +101,58 @@ def crear_silver_gen_operon(con):
         )
 
 
+def crear_silver_regulador_clave(con):
+
+
+    con.sql("""
+        CREATE OR REPLACE VIEW stg_reguladores_lookup AS
+        WITH todos_los_nombres AS (
+            SELECT 
+                "1)regulatorId" AS regulador_id,
+                "2)regulatorName" AS regulador_name,
+                TRIM("2)regulatorName") AS tf_buscado,
+                "5)geneCodingForRegulator" AS gene_coding,
+                1 AS prioridad
+            FROM raw_reguladores
+
+            UNION ALL
+
+            SELECT 
+                "1)regulatorId" AS regulador_id,
+                "2)regulatorName" AS regulador_name,
+                TRIM(unnest(string_split("3)regulatorSynonyms", ';'))) AS tf_buscado,
+                "5)geneCodingForRegulator" AS gene_coding,
+                        2 AS prioridad
+            FROM raw_reguladores
+        ),
+        calcular_ambiguedad AS (
+            SELECT 
+                tf_buscado,
+                prioridad,
+                COUNT(DISTINCT(regulador_id)) AS n_reguladores
+                FROM todos_los_nombres
+                WHERE tf_buscado IS NOT NULL AND tf_buscado != '' AND tf_buscado != '-'
+                GROUP BY tf_buscado, prioridad
+        )
+        SELECT 
+            t.regulador_id,
+            t.regulador_name,
+            t.tf_buscado,
+            t.gene_coding,
+            t.prioridad,
+            (c.n_reguladores > 1) AS es_ambiguo
+        FROM todos_los_nombres t
+        INNER JOIN calcular_ambiguedad c
+            ON t.tf_buscado = c.tf_buscado 
+            AND t.prioridad = c.prioridad
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY t.tf_buscado ORDER BY t.prioridad ASC, t.regulador_id ASC) = 1;
+        """)
+    con.sql("SHOW TABLES;").show()
+
 def ejecutar_transformacion(con):
     """Orquesta la ejecución modular de las tablas Silver."""
     crear_silver_gen_operon(con)
+    crear_silver_regulador_clave(con)
 
 
 if __name__ == "__main__":

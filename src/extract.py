@@ -2,7 +2,7 @@
 from pathlib import Path
 import re
 import duckdb
-from config import DB_PATH
+from config import DB_PATH, RAW_DIR
 
 COLUMNAS_SRNA = [
     "srna_id",
@@ -134,16 +134,9 @@ def cargar_tabla(
     )
 
 
-def ejecutar_extraccion(con, data_dir=None):
-    """Orquesta la extracción de los 5 archivos del pipeline.
-
-    Resuelve la ruta data/ a partir de la ubicación física de este archivo.
-    """
-    if data_dir is None:
-        base_dir = Path(__file__).resolve().parent.parent
-        data_dir = base_dir / "data" / "raw"
-    else:
-        data_dir = Path(data_dir)
+def ejecutar_extraccion(con, data_dir=RAW_DIR):
+    """Orquesta la extracción de los 5 archivos del pipeline."""
+    data_dir = Path(data_dir)
 
     archivos = [
         (data_dir / "OperonSet.tsv", "raw_operones", None),
