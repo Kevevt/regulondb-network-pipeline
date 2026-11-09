@@ -149,7 +149,7 @@ def crear_silver_reguladores_lookup(con):
         QUALIFY ROW_NUMBER() OVER (PARTITION BY t.tf_buscado ORDER BY t.prioridad ASC, t.regulador_id ASC) = 1;
         """)
 
-    # Validación: Aserción de Llave Primaria (tf_buscado)
+   
     con.sql("""
         CREATE OR REPLACE TABLE silver_reguladores_lookup AS
         SELECT
@@ -161,6 +161,20 @@ def crear_silver_reguladores_lookup(con):
             es_ambiguo
         FROM stg_reguladores_lookup;
     """)
+
+    # Validación: Aserción de Llave Primaria (tf_buscado)
+    unicos_plata, total_plata = con.sql(
+        "SELECT COUNT(DISTINCT tf_buscado), COUNT(*) FROM silver_reguladores_lookup"
+    ).fetchone()
+
+    if unicos_plata != total_plata:
+        raise ValueError(
+            f"Falla de Llave Primaria en silver_reguladores_lookup: "
+            f"{unicos_plata} claves únicas != {total_plata} filas totales."
+        )
+    
+
+
 
 def ejecutar_transformacion(con):
     """Orquesta la ejecución modular de las tablas Silver."""
