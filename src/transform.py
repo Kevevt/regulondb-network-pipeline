@@ -101,8 +101,9 @@ def crear_silver_gen_operon(con):
         )
 
 
-def crear_silver_regulador_clave(con):
-
+def crear_silver_reguladores_lookup(con):
+    """ Materializa la tabla 'silver_reguladores_lookup' y audita su llave primaria.
+    """
 
     con.sql("""
         CREATE OR REPLACE VIEW stg_reguladores_lookup AS
@@ -147,12 +148,24 @@ def crear_silver_regulador_clave(con):
             AND t.prioridad = c.prioridad
         QUALIFY ROW_NUMBER() OVER (PARTITION BY t.tf_buscado ORDER BY t.prioridad ASC, t.regulador_id ASC) = 1;
         """)
-    con.sql("SHOW TABLES;").show()
+
+    # Validación: Aserción de Llave Primaria (tf_buscado)
+    con.sql("""
+        CREATE OR REPLACE TABLE silver_reguladores_lookup AS
+        SELECT
+            regulador_id,
+            regulador_name,
+            tf_buscado,
+            gene_coding,
+            prioridad,
+            es_ambiguo
+        FROM stg_reguladores_lookup;
+    """)
 
 def ejecutar_transformacion(con):
     """Orquesta la ejecución modular de las tablas Silver."""
     crear_silver_gen_operon(con)
-    crear_silver_regulador_clave(con)
+    crear_silver_reguladores_lookup(con)
 
 
 if __name__ == "__main__":
