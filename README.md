@@ -19,7 +19,7 @@ Pipeline en Python y DuckDB que ingesta los datos de regulación transcripcional
 | Etapa | Estado | Archivo |
 |---|---|---|
 | Extracción a DuckDB con bitácora de cargas | Funciona | `src/extract.py` |
-| Transformación: limpieza, llaves y modelo relacional | En desarrollo | `src/transform.py` (pendiente) |
+| Transformación: capas staging y plata, descartes y validaciones | En desarrollo | `src/transform.py` |
 | Pruebas automatizadas | Pendiente | `tests/` (pendiente) |
 
 ## Datos de origen
@@ -67,6 +67,7 @@ Después, coloca los 5 archivos fuente en `data/raw/` y ejecuta desde la raíz d
 
 ```bash
 python src/extract.py
+python src/transform.py
 ```
 
 Para trabajar con notebooks, instala también las dependencias de desarrollo: `pip install -r requirements-dev.txt`.
@@ -89,7 +90,10 @@ Al terminar, el script imprime la bitácora de cargas:
 
 <!-- TODO: ajusta si tus razones reales fueron otras -->
 
-**Rutas ancladas al archivo, no al directorio de trabajo.** Las rutas se construyen a partir de `Path(__file__).resolve()`, así que el script encuentra `data/` sin importar desde dónde se ejecute. `ejecutar_extraccion()` acepta además un `data_dir` opcional, lo que permite apuntar a otra carpeta (por ejemplo, datos de prueba).
+**Rutas ancladas al archivo y definidas en un solo lugar.** Las rutas se construyen a partir de `Path(__file__).resolve()`, así que el script encuentra `data/` sin importar desde dónde se ejecute. `ejecutar_extraccion()` acepta además un `data_dir` opcional, lo que permite apuntar a otra carpeta (por ejemplo, datos de prueba). Los módulos de `src/` no arman sus propias rutas, importan `DB_PATH` y `RAW_DIR` de `config.py`.
+Antes, cada módulo tenía su propia ruta y `transform.py` llegó a apuntar a un archivo `.duckdb` distinto del que llenaba `extract.py`. Con una sola ruta esto ya no sucede.
+
+### Extracción
 
 **Carga cruda sin conversión de tipos.** Todas las columnas se cargan como texto (`all_varchar=True`). La conversión de tipos se deja para la transformación, donde se puede validar explícitamente, en lugar de que el lector de CSV adivine tipos y pierda datos en silencio.
 
@@ -98,6 +102,16 @@ Al terminar, el script imprime la bitácora de cargas:
 **Validación de columnas para el archivo de sRNA.** `sRNABindingSiteSet.txt` no tiene una fila de encabezado: declara sus columnas en comentarios con el formato `# (N)`. Antes de cargarlo, `validar_columnas_archivo()` cuenta esas declaraciones y detiene la ejecución con `ValueError` si no coinciden con las 12 columnas esperadas.
 
 **Bitácora de cargas (`control_cargas`).** Cada carga registra tabla, archivo, release, fecha de la fuente, número de filas y momento de ingesta. Las tablas `raw_*` se reemplazan en cada corrida (`CREATE OR REPLACE`), así que repetir la extracción deja los mismos datos. `control_cargas`, en cambio, acumula una fila por carga a propósito: es el historial de ejecuciones.
+
+### Transformación
+
+**`COALESCE` antes de desanidar los genes.** En `stg_operones_desanidados`, la lista de genes de cada operón (`7)operonGenes`) se separa por `;` y se desanida para tener una fila por gen. Si la lista viene en NULL, `unnest(string_split(NULL, ';'))` no devuelve ninguna fila y el operón completo desaparece sin aviso. Con `COALESCE(..., '')`, ese operón deja una fila vacía que llega a `silver_descartes` con su motivo, así que queda registrado en lugar de perderse.
+
+**Descartes con motivo, en una sola tabla e idempotentes.** Los genes vacíos o con guion (`-`) no se filtran sin más: van a `silver_descartes` con fuente, identificador, valor y motivo. Todas las etapas comparten esa tabla, y antes de insertar cada una borra solo las filas de su fuente (`DELETE ... WHERE fuente = 'OperonSet'`). Correr el script dos veces deja lo mismo y no toca los descartes de otras fuentes.
+
+**Un gen, un operón.** `silver_gen_operon` tiene una fila por gen, y si un gen se repite la corrida se detiene con `ValueError`. Más adelante, cada interacción regulatoria se va a expandir a los genes de su operón: un gen en dos operones multiplicaría esas aristas sin dar ningún error (*fan-out*). En esta release, los 4,530 genes están cada uno en un solo operón.
+
+**Ningún operón se pierde entre raw y staging.** Se cuentan los operones distintos de `raw_operones` y los de `stg_operones_desanidados`, y si no coinciden la corrida se detiene con `ValueError`. Se compara contra staging y no contra plata porque en plata un operón puede faltar con razón, si todos sus genes se descartaron. En esta release salen 2,613 de los dos lados; el número no está fijo en el código.
 
 ## Limitaciones conocidas
 
@@ -113,7 +127,9 @@ regulondb-network-pipeline/
 │   ├── raw/               # Archivos fuente de RegulonDB
 │   └── db/                # regulondb.duckdb
 ├── src/
-│   └── extract.py         # Extracción a DuckDB y bitácora de cargas
+│   ├── config.py          # Rutas compartidas (DB_PATH, RAW_DIR)
+│   ├── extract.py         # Extracción a DuckDB y bitácora de cargas
+│   └── transform.py       # Staging, plata, descartes y validaciones
 ├── requirements.txt
 └── requirements-dev.txt
 ```
