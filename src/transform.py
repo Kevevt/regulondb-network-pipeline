@@ -123,7 +123,7 @@ def crear_silver_reguladores_lookup(con):
                 "2)regulatorName" AS regulador_name,
                 TRIM(unnest(string_split("3)regulatorSynonyms", ';'))) AS tf_buscado,
                 "5)geneCodingForRegulator" AS gene_coding,
-                        2 AS prioridad
+                2 AS prioridad
             FROM raw_reguladores
         ),
         calcular_ambiguedad AS (
@@ -173,13 +173,72 @@ def crear_silver_reguladores_lookup(con):
             f"{unicos_plata} claves únicas != {total_plata} filas totales."
         )
     
+def crear_view_ri(con):
+    """ Enriquece raw_ri con regulador y operón, y marca el motivo de descarte """
+    con.sql("""
+        CREATE OR REPLACE VIEW stg_ri AS
+        WITH ri_limpio AS (
+        SELECT
+            CAST(rowid AS VARCHAR) AS identificador,
+            TRIM("4)tfName") AS tf,
+            TRIM("16)firstGene") AS first_gene,
+            "11)riFunction" AS ri_function,
+            "20)tfrsEvidence" AS tfrs_evidence,
+            "21)riEvidence" AS ri_evidence
 
+        FROM raw_ri
+            )
+        SELECT
+            r.identificador,
+            r.tf,
+            reguladores.gene_coding,
+            r.first_gene,
+            r.ri_function,
+            r.tfrs_evidence,
+            r.ri_evidence,
+            reguladores.regulador_id,
+            g.operon_id,
 
+        -- Se audita primero el TF antes que el gen
+        CASE
+            WHEN r.tf IS NULL OR r.tf IN ('', '-') THEN 'TF vacío o guion'
+            WHEN reguladores.regulador_id IS NULL OR reguladores.regulador_id IN ('', '-') THEN 'TF no está en el lookup'
+            WHEN reguladores.es_ambiguo IS True THEN 'TF ambiguo'
+            WHEN r.first_gene IS NULL OR r.first_gene IN ('', '-') THEN 'firstGene vacío o guion'
+            WHEN g.gen IS NULL THEN 'firstGene sin operón'
+        END AS motivo
+        FROM ri_limpio r
+        LEFT JOIN silver_reguladores_lookup reguladores ON r.tf = reguladores.tf_buscado
+        LEFT JOIN silver_gen_operon g ON r.first_gene = g.gen
+    """)
+
+    unicos_plata, total_plata = con.sql(
+        "SELECT COUNT(DISTINCT identificador), COUNT(*) FROM stg_ri"
+    ).fetchone()
+
+    if unicos_plata != total_plata:
+        raise ValueError(
+            f"Falla de Llave Primaria en stg_ri: "
+            f"{unicos_plata} claves únicas != {total_plata} filas totales."
+        )
+
+    total_stg = con.sql("SELECT COUNT(*) FROM stg_ri").fetchone()[0]
+    print(f"Filas en stg_ri: {total_stg}")
+
+    con.sql("""
+                SELECT 
+                    COALESCE(motivo, 'Válido') AS motivo,
+                    COUNT(*) AS total
+                FROM stg_ri
+                GROUP BY motivo
+                ORDER BY total DESC
+        """).show()
 
 def ejecutar_transformacion(con):
     """Orquesta la ejecución modular de las tablas Silver."""
     crear_silver_gen_operon(con)
     crear_silver_reguladores_lookup(con)
+    crear_view_ri(con)
 
 
 if __name__ == "__main__":
