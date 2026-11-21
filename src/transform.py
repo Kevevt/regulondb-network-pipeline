@@ -212,18 +212,15 @@ def crear_view_ri(con):
         LEFT JOIN silver_gen_operon g ON r.first_gene = g.gen
     """)
 
-    unicos_plata, total_plata = con.sql(
+    unicos, total = con.sql(
         "SELECT COUNT(DISTINCT identificador), COUNT(*) FROM stg_ri"
     ).fetchone()
 
-    if unicos_plata != total_plata:
+    if unicos != total:
         raise ValueError(
-            f"Falla de Llave Primaria en stg_ri: "
-            f"{unicos_plata} claves únicas != {total_plata} filas totales."
+            f"Ha ocurrido un fan-out en stg_ri: "
+            f"{unicos} id únicos != {total} filas totales."
         )
-
-    total_stg = con.sql("SELECT COUNT(*) FROM stg_ri").fetchone()[0]
-    print(f"Filas en stg_ri: {total_stg}")
 
     con.sql("""
                 SELECT 
