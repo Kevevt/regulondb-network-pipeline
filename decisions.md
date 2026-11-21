@@ -14,3 +14,31 @@
 **Pierdo:** (1) Las interacciones con una clave ambigua salen de la red aunque uno de los competidores fuera el correcto, y los ids de los competidores (MarR, OmrA) no se pueden recuperar desde el lookup. (2) Un sinónimo de B que coincide con el nombre oficial de A se atribuye a A sin marca; en la corrida A pasa con 1 clave (DicA) y afecta a 3 RIs, atribuidas al oficial sin verificar que sea la lectura correcta.
 
 **Validación:** `COUNT(*) = COUNT(DISTINCT tf_buscado)` en el lookup, o `raise ValueError`. Corrida A: 4 claves ambiguas (SoxQ, InaR, CfxB, T59) con 0 RIs afectadas en `raw_ri`, y el `CASE` de `stg_ri` sobre `es_ambiguo` las descartaría si las hubiera.
+
+## 002 · 2026-11-21 · transform.py
+
+**Contexto:** `raw_ri` es la tabla de hechos y hay que enriquecerla con regulador y operón sin perder ni duplicar filas, dejando el motivo cuando algo no cruza.
+
+**Decisión:** Una vista `stg_ri` con dos LEFT JOIN (a `silver_reguladores_lookup` y a `silver_gen_operon`) en la que cada RI sale con un solo `motivo` (NULL = válida). El `CASE` audita primero el TF y después el gen, y se queda con la primera condición que se cumple. La vista también trae `gene_coding`, que se usará para armar las aristas al final del pipeline.
+
+**Alternativa:** Mandar las filas defectuosas a descartes sin motivo. Descartada: sin el motivo no se puede rastrear por qué se descartó cada fila.
+
+**Gano:** Ninguna fila inválida se elimina en silencio: la vista conserva las 5,281 interacciones y cada una lleva su `motivo`, listo para que el paso siguiente separe válidas y descartes.
+
+**Pierdo:** Una fila con varios defectos solo se reporta por el primero que encuentra el `CASE` (TF antes que gen); el segundo queda oculto hasta corregir el primero. En la corrida A pasa con 0 filas: las 10 descartadas pasan los chequeos de TF y fallan solo en el gen.
+
+**Validación:** `COUNT(DISTINCT identificador) = COUNT(*)` en `stg_ri`, o `raise ValueError` (un fan-out repetiría identificadores). Corrida A: 5,281 = 5,271 válidas + 7 firstGene sin operón + 3 firstGene vacío o guion.
+
+## 003 · 2026-11-21 · transform.py
+
+**Contexto:** `raw_ri`  no viene con identificador único para cada fila.
+
+**Decisión:** Asignar un identificador único con `CAST(rowid AS VARCHAR)`.
+
+**Alternativa:** concatenar las columnas: TF + sitio + unidad para ser el id compuesto. Descartada: No comprobada su unicidad y `rowid` era más simple.
+
+**Gano:** Todas las filas traen identificadores únicos, los cuales sirven para verificar cuando ocurre un fan-out cuando toque enriquecer dicha tabla.
+
+**Pierdo:** No me garantiza que el mismo id apunte a la misma fila en corridas posteriores.
+
+**Validación:** No se puede verificar que un id no esté apuntando a diferentes filas en diferentes corridas
