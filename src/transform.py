@@ -41,7 +41,7 @@ def crear_silver_gen_operon(con):
         WHERE motivo IS NULL;
     """)
 
-    # 3. Idempotencia en Descartes: Crear tabla si no existe, borrar previos e insertar
+    # 3. Descartes: Crear tabla si no existe, borrar previos e insertar
     con.sql("""
         CREATE TABLE IF NOT EXISTS silver_descartes (
             fuente VARCHAR,
@@ -50,8 +50,11 @@ def crear_silver_gen_operon(con):
             motivo VARCHAR
         );
     """)
-
-    con.sql("DELETE FROM silver_descartes WHERE fuente = 'OperonSet';")
+    # 4. Descartes: borrar previos e insertar nuevo registro para silver_gen_operon
+    con.sql("""
+            DELETE FROM silver_descartes 
+            WHERE fuente = 'OperonSet'
+    """)
 
     con.sql("""
         INSERT INTO silver_descartes (fuente, identificador, valor, motivo)
@@ -64,7 +67,7 @@ def crear_silver_gen_operon(con):
         WHERE motivo IS NOT NULL;
     """)
 
-    # Validación 1: Aserción de Llave Primaria (Gen Único en Plata)
+    # 5. Validación 1: Aserción de Llave Primaria (Gen Único en Plata)
     unicos_plata, total_plata = con.sql(
         "SELECT COUNT(DISTINCT gen), COUNT(*) FROM silver_gen_operon"
     ).fetchone()
@@ -75,7 +78,7 @@ def crear_silver_gen_operon(con):
             f"{unicos_plata} genes únicos != {total_plata} filas totales."
         )
 
-    # Validación 2: Invariante Real contra la fuente raw_operones
+    # 6. Validación 2: Invariante Real contra la fuente raw_operones
     operones_raw = con.sql(
         'SELECT COUNT(DISTINCT "1)operonId") FROM raw_operones'
     ).fetchone()[0]
@@ -104,7 +107,7 @@ def crear_silver_gen_operon(con):
 def crear_silver_reguladores_lookup(con):
     """ Materializa la tabla 'silver_reguladores_lookup' y audita su llave primaria.
     """
-
+    # 1. Vista Staging: Añadir prioridad 1 al nombre oficial y prioridad 2 a los sinonimos
     con.sql("""
         CREATE OR REPLACE VIEW stg_reguladores_lookup AS
         WITH todos_los_nombres AS (
@@ -149,7 +152,7 @@ def crear_silver_reguladores_lookup(con):
         QUALIFY ROW_NUMBER() OVER (PARTITION BY t.tf_buscado ORDER BY t.prioridad ASC, t.regulador_id ASC) = 1;
         """)
 
-   
+    # 2. Tabla Plata (silver_reguladores_lookup)
     con.sql("""
         CREATE OR REPLACE TABLE silver_reguladores_lookup AS
         SELECT
@@ -162,7 +165,7 @@ def crear_silver_reguladores_lookup(con):
         FROM stg_reguladores_lookup;
     """)
 
-    # Validación: Aserción de Llave Primaria (tf_buscado)
+    # 3. Validación: Aserción de Llave Primaria (tf_buscado)
     unicos_plata, total_plata = con.sql(
         "SELECT COUNT(DISTINCT tf_buscado), COUNT(*) FROM silver_reguladores_lookup"
     ).fetchone()
@@ -173,8 +176,9 @@ def crear_silver_reguladores_lookup(con):
             f"{unicos_plata} claves únicas != {total_plata} filas totales."
         )
     
-def crear_view_ri(con):
-    """ Enriquece raw_ri con regulador y operón, y marca el motivo de descarte """
+def crear_silver_ri(con):
+    """ Materializa la tabla silver_ri, al enriquecer raw_ri con regulador y operón, y marca el motivo de descarte """
+    # 1. Vista Staging: rowid, TRIM(), enriquecer raw_ri y clasificar con CASE WHEN
     con.sql("""
         CREATE OR REPLACE VIEW stg_ri AS
         WITH ri_limpio AS (
@@ -212,6 +216,42 @@ def crear_view_ri(con):
         LEFT JOIN silver_gen_operon g ON r.first_gene = g.gen
     """)
 
+    # 2. Tabla Plata (silver_ri)
+    con.sql("""
+        CREATE OR REPLACE TABLE silver_ri AS
+        SELECT 
+            identificador,
+            tf,
+            gene_coding,
+            first_gene,
+            ri_function,
+            tfrs_evidence,
+            ri_evidence,
+            regulador_id,
+            operon_id
+        FROM stg_ri
+        WHERE motivo IS NULL;
+    """)
+
+    # 3. Descartes: borrar previos e insertar nuevo registro para silver_descartes
+    con.sql("""
+            DELETE FROM silver_descartes 
+            WHERE fuente = 'RISet'
+    """)
+    
+    con.sql("""
+            INSERT INTO silver_descartes (fuente, identificador, valor, motivo)
+            SELECT 
+                'RISet' AS fuente,
+                identificador AS identificador,
+                first_gene AS valor,
+                motivo
+            FROM stg_ri
+            WHERE motivo IS NOT NULL;
+    """)
+    
+
+    # 4. Validación 1: Aserción de coincidencia por id 
     unicos, total = con.sql(
         "SELECT COUNT(DISTINCT identificador), COUNT(*) FROM stg_ri"
     ).fetchone()
@@ -231,11 +271,35 @@ def crear_view_ri(con):
                 ORDER BY total DESC
         """).show()
 
+    # 6. Validación 2: Conservación de filas entre Staging y Plata (silver_ri)
+    ri_stg = con.sql("""
+            SELECT COUNT(*) FROM stg_ri
+    """).fetchone()[0]
+
+    ri_silver = con.sql("""
+            SELECT COUNT(*) FROM silver_ri
+    """).fetchone()[0]
+
+    total_descartes = con.sql(
+        "SELECT COUNT(*) FROM silver_descartes WHERE fuente = 'RISet'"
+    ).fetchone()[0]
+
+    if ri_silver + total_descartes != ri_stg:
+        raise ValueError(
+            f"Falla de conservación en silver_ri: {ri_silver} válidas + {total_descartes} descartes "
+            f"({ri_silver + total_descartes}) != {ri_stg} filas en Staging."
+        )
+
+    print("=== Auditoría: silver_ri ===")
+    print(f"filas en stg_ri:        {ri_stg}")
+    print(f"filas Válidas en Plata: {ri_silver}")
+    print(f"Descartes de RISet:     {total_descartes}")
+
 def ejecutar_transformacion(con):
     """Orquesta la ejecución modular de las tablas Silver."""
     crear_silver_gen_operon(con)
     crear_silver_reguladores_lookup(con)
-    crear_view_ri(con)
+    crear_silver_ri(con)
 
 
 if __name__ == "__main__":
