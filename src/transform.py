@@ -244,7 +244,11 @@ def crear_silver_ri(con):
             SELECT 
                 'RISet' AS fuente,
                 identificador AS identificador,
-                first_gene AS valor,
+                -- cada dato se toma exactamente de la columna que causó el descarte. Sin ELSE a propósito: un motivo nuevo queda en NULL
+                CASE
+                    WHEN motivo LIKE 'TF%' THEN tf
+                    WHEN motivo LIKE 'firstGene%' THEN first_gene
+                END AS valor,
                 motivo
             FROM stg_ri
             WHERE motivo IS NOT NULL;
