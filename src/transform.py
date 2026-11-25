@@ -299,11 +299,69 @@ def crear_silver_ri(con):
     print(f"filas Válidas en Plata: {ri_silver}")
     print(f"Descartes de RISet:     {total_descartes}")
 
+def crear_silver_ri_gen(con):
+    """ Materializa la tabla silver_ri_gen, al expandir silver_ri con la interacción con 
+    todos los genes de un operon donde cada fila es un RI y gen regulado
+    """
+
+    # 1. Crea la tabla silver_ri_gen
+    con.sql("""
+    CREATE OR REPLACE TABLE silver_ri_gen AS
+    SELECT
+        r.identificador,
+        r.tf,
+        r.gene_coding AS gene_coding_tf,
+        r.first_gene,
+        o.gen AS gen_regulado,
+        o.operon_name,
+        r.ri_function,
+        r.tfrs_evidence,
+        r.ri_evidence,
+        r.regulador_id,
+        r.operon_id
+    FROM silver_ri r
+    LEFT JOIN silver_gen_operon o ON r.operon_id = o.operon_id;
+    """)
+
+    # 2. Validación 1: conteo esperado de la expansión
+    esperado = con.sql("""
+    WITH conteo_operones AS(
+        SELECT
+            operon_id,
+        COUNT(*) AS num_genes
+        FROM silver_gen_operon
+        GROUP BY operon_id 
+    )
+    
+    SELECT
+        SUM(o.num_genes) AS total
+    FROM silver_ri r
+    LEFT JOIN conteo_operones o ON r.operon_id = o.operon_id;
+    """).fetchone()[0]
+
+    real = con.sql("""
+    SELECT
+    COUNT(*)
+    FROM silver_ri_gen
+    """).fetchone()[0]
+
+    if esperado != real:
+        raise ValueError(
+            f"Falla de expansión 1:N en silver_ri_gen: "
+            f"{real} filas materializadas != {esperado} interacciones RI-gen esperadas."
+        )
+    
+    print("=== Auditoría: silver_ri_gen ===")
+    print(f"Interacciones RI-gen esperadas: {esperado}")
+    print(f"Filas creadas en silver_ri_gen: {real}")
+
+
 def ejecutar_transformacion(con):
     """Orquesta la ejecución modular de las tablas Silver."""
     crear_silver_gen_operon(con)
     crear_silver_reguladores_lookup(con)
     crear_silver_ri(con)
+    crear_silver_ri_gen(con)
 
 
 if __name__ == "__main__":
