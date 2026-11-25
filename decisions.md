@@ -45,7 +45,7 @@
 
 ## 004 · 2026-11-24 · transform.py
 
-**Estado:** Propuesta
+**Estado:** Aceptada (2026-11-25)
 
 **Contexto:** Cada RI registra la interacción entre un TF y un `firstGene`, que es el primer gen de la unidad que arranca en su promotor y no siempre el primero del operón: a veces quedan genes antes del promotor. La red necesita una arista por cada gen regulado.
 
@@ -53,8 +53,8 @@
 
 **Alternativa:** Expandir solo desde `firstGene` hacia adelante (los genes que sí transcribe ese promotor). Descartada: `silver_gen_operon` no guarda la posición del gen en el operón, y la salida ya no se podría reconciliar contra la del script viejo.
 
-**Gano:** --
+**Gano:** Al usar la misma regla del script viejo, se puede lograr una reconciliación. Además, es más fácil realizar un JOIN por `operon_id`, sin necesitar la posición del gen que hoy no se guarda.
 
-**Pierdo:** --
+**Pierdo:** La red incluye aristas que biológicamente no existen: hacia genes antes del promotor y que en la salida del script viejo fueron 566.
 
-**Validación:** --
+**Validación:** `COUNT(*)` de filas en `silver_ri_gen` = `SUM(o.num_genes)`, `num_genes` es el número total de genes por cada operón o `raise ValueError`, donde de 5,271 RIs válidas se obtienen 13,272 filas RI-gen, en dos corridas.
