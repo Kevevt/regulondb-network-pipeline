@@ -42,3 +42,19 @@
 **Pierdo:** No me garantiza que el mismo id apunte a la misma fila en corridas posteriores.
 
 **Validación:** No se puede verificar que un id no esté apuntando a diferentes filas en diferentes corridas
+
+## 004 · 2026-11-24 · transform.py
+
+**Estado:** Propuesta
+
+**Contexto:** Cada RI registra la interacción entre un TF y un `firstGene`, que es el primer gen de la unidad que arranca en su promotor y no siempre el primero del operón: a veces quedan genes antes del promotor. La red necesita una arista por cada gen regulado.
+
+**Decisión:** Expandir cada RI válida de `silver_ri` a todos los genes de su operón (`silver_gen_operon`, por `operon_id`), incluidos los que quedan antes del promotor, igual que el script viejo, para poder reconciliar contra sus ~7,180 aristas de TFs.
+
+**Alternativa:** Expandir solo desde `firstGene` hacia adelante (los genes que sí transcribe ese promotor). Descartada: `silver_gen_operon` no guarda la posición del gen en el operón, y la salida ya no se podría reconciliar contra la del script viejo.
+
+**Gano:** --
+
+**Pierdo:** --
+
+**Validación:** --
