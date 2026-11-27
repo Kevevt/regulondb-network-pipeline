@@ -58,3 +58,15 @@
 **Pierdo:** La red incluye aristas que biológicamente no existen: hacia genes antes del promotor y que en la salida del script viejo fueron 566.
 
 **Validación:** `COUNT(*)` de filas en `silver_ri_gen` = `SUM(o.num_genes)`, `num_genes` es el número total de genes por cada operón o `raise ValueError`, donde de 5,271 RIs válidas se obtienen 13,272 filas RI-gen, en dos corridas.
+
+## 005 · 2026-11-27 · transform.py
+**Estado:** Propuesta
+
+**Contexto:** Al armar las aristas, varias RIs caen en el mismo par regulador–regulado (13,272 filas → 7,154 pares), y en cada RI el regulador puede venir con su nombre oficial, con un sinónimo o como un complejo proteico (13 complejos). Como un mismo par junta varias filas, hay que observar el tipo de regulación de cada fila y ver si se combinan (490 pares traen activación y represión a la vez), y el tipo de evidencia de cada fila, para decidir cómo se resumen en un solo valor.
+
+**Decisión:**
+1. Regulador: se identifica por `regulador_id`, porque en algunas RIs viene escrito como sinónimo; se muestra con el gen que lo codifica (`gene_coding_tf`). Los 13 complejos se resuelven en su propio paso.
+2. Efecto por par: `+` si solo hay activación, `-` si solo hay represión, `+-` si hay ambas y `?` si solo hay unknown. Se combina en `+-` como en el script viejo, pero unknown se mapea aparte para corregir su error (convertía unknown en represión).
+3. Evidencia por par: S si alguna fila del par trae S en `ri_evidence` o en `tfrs_evidence`; si ninguna trae S pero alguna trae W, W; si todas traen `-` en ambas columnas, "sin evidencia". Cualquier otro formato detiene la corrida. Es la regla del script viejo y la que documenta Abasy Atlas (2016).
+
+**Alternativa:** Copiar el `else` del script viejo (todo lo que no es activador se vuelve `-`): la columna de efecto saldría igual que la vieja y no habría diferencias que explicar en la reconciliación. Descartada: etiqueta los unknown como represión; según la revisión del código viejo, deja 30 aristas con el efecto mal (16 `-` que deberían ser `?` y 14 `+-` falsos).
